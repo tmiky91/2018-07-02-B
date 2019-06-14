@@ -7,10 +7,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import it.polito.tdp.extflightdelays.model.Airline;
 import it.polito.tdp.extflightdelays.model.Airport;
 import it.polito.tdp.extflightdelays.model.Flight;
+import it.polito.tdp.extflightdelays.model.Rotta;
 
 public class ExtFlightDelaysDAO {
 
@@ -37,7 +39,7 @@ public class ExtFlightDelaysDAO {
 		}
 	}
 
-	public List<Airport> loadAllAirports() {
+	public List<Airport> loadAllAirports(Map<Integer, Airport> idMap) {
 		String sql = "SELECT * FROM airports";
 		List<Airport> result = new ArrayList<Airport>();
 
@@ -47,10 +49,15 @@ public class ExtFlightDelaysDAO {
 			ResultSet rs = st.executeQuery();
 
 			while (rs.next()) {
-				Airport airport = new Airport(rs.getInt("ID"), rs.getString("IATA_CODE"), rs.getString("AIRPORT"),
-						rs.getString("CITY"), rs.getString("STATE"), rs.getString("COUNTRY"), rs.getDouble("LATITUDE"),
-						rs.getDouble("LONGITUDE"), rs.getDouble("TIMEZONE_OFFSET"));
-				result.add(airport);
+				if(!idMap.containsKey(rs.getInt("ID"))) {
+					Airport airport = new Airport(rs.getInt("ID"), rs.getString("IATA_CODE"), rs.getString("AIRPORT"),
+							rs.getString("CITY"), rs.getString("STATE"), rs.getString("COUNTRY"), rs.getDouble("LATITUDE"),
+							rs.getDouble("LONGITUDE"), rs.getDouble("TIMEZONE_OFFSET"));
+					result.add(airport);
+					idMap.put(rs.getInt("ID"), airport);
+				}else {
+					result.add(idMap.get(rs.getInt("ID")));
+				}
 			}
 
 			conn.close();
@@ -80,6 +87,38 @@ public class ExtFlightDelaysDAO {
 						rs.getDouble("ELAPSED_TIME"), rs.getInt("DISTANCE"),
 						rs.getTimestamp("ARRIVAL_DATE").toLocalDateTime(), rs.getDouble("ARRIVAL_DELAY"));
 				result.add(flight);
+			}
+
+			conn.close();
+			return result;
+
+		} catch (SQLException e) {
+			e.printStackTrace();
+			System.out.println("Errore connessione al database");
+			throw new RuntimeException("Error Connection Database");
+		}
+	}
+
+	public List<Rotta> getRotte(Map<Integer, Airport> idMap, String numVoli) {
+		final String sql=	"select f1.ORIGIN_AIRPORT_ID as id1, f1.DESTINATION_AIRPORT_ID as id2, avg(f1.ELAPSED_TIME) as media " + 
+							"from flights as f1 " + 
+							"where f1.ORIGIN_AIRPORT_ID != f1.DESTINATION_AIRPORT_ID " + 
+							"group by id1, id2 " + 
+							"having count(*)>=? ";
+		List<Rotta> result = new LinkedList<>();
+		try {
+			Connection conn = ConnectDB.getConnection();
+			PreparedStatement st = conn.prepareStatement(sql);
+			st.setInt(1, Integer.parseInt(numVoli));
+			ResultSet rs = st.executeQuery();
+
+			while (rs.next()) {
+				Airport a1 = idMap.get(rs.getInt("id1"));
+				Airport a2 = idMap.get(rs.getInt("id2"));
+				if(a1!=null && a2!=null) {
+					Rotta rotta = new Rotta(a1, a2, rs.getDouble("media"));
+					result.add(rotta);
+				}
 			}
 
 			conn.close();
